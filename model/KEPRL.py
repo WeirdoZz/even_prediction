@@ -3,6 +3,7 @@ from torch import nn
 from model.dunamicGRU import DynamicGRU
 import torch.nn.functional as F
 from eval_metrics import *
+from utils import sample_event
 
 
 class KEPRL(nn.Module):
@@ -13,7 +14,7 @@ class KEPRL(nn.Module):
         self.args = model_args
         self.device = device
         self.lamda = 10
-
+        self.epsilon=0.5
         dims = self.args.d
 
         self.kg_map = kg_map
@@ -153,10 +154,14 @@ class KEPRL(nn.Module):
         out_distribution = torch.add(out_distribution, pred_one_hot)
         probs.append(out_distribution)
 
-        m = torch.distributions.categorical.Categorical(out_distribution)
-        # 从这个分布中随机抽取一个索引（按照分布来的）
-        sample1 = m.sample()
+        # m = torch.distributions.categorical.Categorical(out_distribution)
+        # # 从这个分布中随机抽取一个索引（按照分布来的）
+        # sample1 = m.sample()
+        sample1 = sample_event(out_distribution,self.epsilon)
+        epsilon = (self.epsilon - 1e-6) if self.epsilon > 0.1 else 0.1
         each_sample.append(sample1)
+
+
 
         # 对于该action我们获取奖励
         Reward = self.generateReward(sample1, self.args.T - 1, 3, events_to_predict,pred_one_hot, h ,target_len)
@@ -225,8 +230,11 @@ class KEPRL(nn.Module):
                 out_distribution = torch.add(out_distribution, pred_ont_hot)
 
                 # 往后预测一个
-                m = torch.distributions.categorical.Categorical(out_distribution)
-                sample2 = m.sample()
+                # m = torch.distributions.categorical.Categorical(out_distribution)
+                # sample2 = m.sample()
+
+                sample2 = sample_event(out_distribution, self.epsilon)
+                epsilon = (self.epsilon - 1e-6) if self.epsilon > 0.1 else 0.1
 
                 dec_inp = self.item_embeddings(sample2)
                 dec_inp = dec_inp.unsqueeze(1)
