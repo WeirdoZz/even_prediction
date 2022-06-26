@@ -278,17 +278,17 @@ def train_keprl(train_data,dev_data,test_data,config,kg_map,num_events):
             # pred_one_hot = torch.from_numpy(pred_one_hot).type(torch.FloatTensor).to(device)
             pred_one_hot=pred_one_hot.to(device)
 
-            prediction_score, origin, batch_targets, Reward, dist_sort = seq_model.RL_train(batch_sequences,
+            prediction_score, origin, batch_targets, Reward = seq_model.RL_train(batch_sequences,
                                                                                             events_to_predict,
                                                                                             pred_one_hot, trainlen,
                                                                                             tarlen)
             target = torch.ones((len(prediction_score))).unsqueeze(1).to(device)
 
             # 最小的seq奖励对应的kg奖励和最大的seq奖励对应的kg奖励
-            min_reward = dist_sort[0, :].unsqueeze(1)
-            max_reward = dist_sort[-1, :].unsqueeze(1)
-            # 求一个margin ranking 损失
-            mrloss = MRLoss(max_reward, min_reward, target)
+            # min_reward = dist_sort[0, :].unsqueeze(1)
+            # max_reward = dist_sort[-1, :].unsqueeze(1)
+            # # 求一个margin ranking 损失
+            # mrloss = MRLoss(max_reward, min_reward, target)
 
             # 将预测概率去掉stack多出来的那一维
             origin = origin.view(prediction_score.shape[0] * prediction_score.shape[1], -1)
@@ -303,7 +303,7 @@ def train_keprl(train_data,dev_data,test_data,config,kg_map,num_events):
             prob = torch.diagonal(prob, 0)
             # 获取rl损失
             RLloss = -torch.mean(torch.mul(reward, torch.log(prob)))
-            loss = RLloss + lamda * mrloss
+            loss = RLloss #+ lamda * mrloss
             epoch_loss += loss.item()
 
             optimizer.zero_grad()

@@ -25,7 +25,7 @@ class KEPRL(nn.Module):
         self.mlp_history = nn.Linear(50, 50)
 
         # 这个mlp的输入就是前面三种表示的拼接，然后通过fc输出一个可能选取的商品的概率
-        self.mlp = nn.Linear(dims + 50 * 2, dims * 2)
+        self.mlp = nn.Linear(dims, dims * 2)
         self.fc = nn.Linear(dims * 2, num_events)
 
         self.BN = nn.BatchNorm1d(50, affine=False)
@@ -47,18 +47,18 @@ class KEPRL(nn.Module):
         out_enc, h = self.enc(input, len)
 
         # 对事件的知识嵌入向量做一个批量归一化
-        kg_map = self.BN(self.kg_map)
-        kg_map = kg_map.detach()
-        batch_kg = self.get_kg(batch_sequences, len, kg_map)
+        # kg_map = self.BN(self.kg_map)
+        # kg_map = kg_map.detach()
+        # batch_kg = self.get_kg(batch_sequences, len, kg_map)
 
-        mlp_in = torch.cat([h.squeeze(), batch_kg, self.mlp_history(batch_kg)], dim=1)
+        mlp_in = h.squeeze()#torch.cat([h.squeeze(), batch_kg, self.mlp_history(batch_kg)], dim=1)
         mlp_hidden = self.mlp(mlp_in)
         mlp_hidden = torch.tanh(mlp_hidden)
 
         out = self.fc(mlp_hidden)
         out=F.softmax(out,dim=-1)
         probs.append(out)
-        return torch.stack(probs, dim=1),h,batch_kg
+        return torch.stack(probs, dim=1),h#,batch_kg
 
     def forward_after(self,batch_sequences,h,batch_kg):
         """
@@ -133,11 +133,11 @@ class KEPRL(nn.Module):
         out_enc, h = self.enc(input, train_len)
 
         # 根据知识图获取当前的喜好知识表示
-        kg_map = self.BN(self.kg_map)
-        batch_kg = self.get_kg(batch_sequences, train_len, kg_map)
+        # kg_map = self.BN(self.kg_map)
+        # batch_kg = self.get_kg(batch_sequences, train_len, kg_map)
 
         # 根据当前喜好获取未来的喜好，并且做一个cat
-        mlp_in = torch.cat([h.squeeze(), batch_kg, self.mlp_history(batch_kg)], dim=1)
+        mlp_in = h.squeeze()#torch.cat([h.squeeze(), batch_kg, self.mlp_history(batch_kg)], dim=1)
 
         # 再用一个mlp对上面的结果做一个映射，最终fc的输出的维度是总商品数量
         mlp_hidden = self.mlp(mlp_in)
@@ -159,15 +159,15 @@ class KEPRL(nn.Module):
         each_sample.append(sample1)
 
         # 对于该action我们获取奖励
-        Reward, dist_sort = self.generateReward(sample1, self.args.T - 1, 3, events_to_predict,pred_one_hot, h, batch_kg, kg_map, target_len)
+        Reward = self.generateReward(sample1, self.args.T - 1, 3, events_to_predict,pred_one_hot, h ,target_len)
         Rewards.append(Reward)
 
         probs = torch.stack(probs, dim=1)
         probs_origin = torch.stack(probs_origin, dim=1)
 
-        return probs, probs_origin, torch.stack(each_sample, dim=1), torch.stack(Rewards, dim=1), dist_sort
+        return probs, probs_origin, torch.stack(each_sample, dim=1), torch.stack(Rewards, dim=1)
 
-    def generateReward(self, sample1, path_len, path_num, items_to_predict,pred_ont_hot, h_origin, batch_kg, kg_map, target_len):
+    def generateReward(self, sample1, path_len, path_num, items_to_predict,pred_ont_hot, h_origin, target_len):
         """
 
         :param sample1: action，是一个事件的id
@@ -183,7 +183,7 @@ class KEPRL(nn.Module):
         """
 
         # 获取未来的事件表示
-        history_kg = self.mlp_history(batch_kg)
+        # history_kg = self.mlp_history(batch_kg)
 
         Reward = []
         dist = []
@@ -204,14 +204,14 @@ class KEPRL(nn.Module):
             dec_inp = dec_inp.unsqueeze(1)
 
             # 获取真实的知识图的平均池化
-            ground_kg = self.get_kg(items_to_predict, target_len, kg_map)
+            # ground_kg = self.get_kg(items_to_predict, target_len, kg_map)
 
             for i in range(path_len):
                 # 用预测的第一时刻放入gru以预测之后时刻(1,2048,50)
                 out_enc, h = self.enc(dec_inp, h, one=True)
 
                 # 获取结合了三种表示的状态表示
-                mlp_in = torch.cat([h.squeeze(), batch_kg, self.mlp_history(batch_kg)], dim=1)
+                mlp_in = h.squeeze()#torch.cat([h.squeeze(), batch_kg, self.mlp_history(batch_kg)], dim=1)
                 # 获取三种状态表示的
                 mlp_hidden = self.mlp(mlp_in)
                 mlp_hidden = torch.tanh(mlp_hidden)
@@ -235,27 +235,27 @@ class KEPRL(nn.Module):
             # 此时indexes中存储的是config.T-1个预测的商品id
             indexes = torch.stack(indexes, dim=1)
             # 获取这三个事件对应的当前可能性的知识表示
-            episode_kg = self.get_kg(indexes, torch.Tensor([path_len + 1] * len(indexes)), kg_map)
+            # episode_kg = self.get_kg(indexes, torch.Tensor([path_len + 1] * len(indexes)), kg_map)
 
             # 获取我们预测的事件的平均池化，与ground_truth求一个距离
-            dist.append(self.cos(episode_kg, ground_kg))
-            dist_replay.append(self.cos(episode_kg, history_kg))
+            # dist.append(self.cos(episode_kg, ground_kg))
+            # dist_replay.append(self.cos(episode_kg, history_kg))
 
             Reward.append(bleu_each(items_to_predict, indexes))
 
         Reward = torch.FloatTensor(Reward).to(self.device)
         # 将多次的预测取平均
-        dist = torch.stack(dist, dim=0)
-        dist = torch.mean(dist, dim=0)
+        # dist = torch.stack(dist, dim=0)
+        # dist = torch.mean(dist, dim=0)
 
-        dist_replay = torch.stack(dist_replay, dim=0)
-        dist_sort = self.compare_kgReward(Reward, dist_replay)
+        # dist_replay = torch.stack(dist_replay, dim=0)
+        # dist_sort = self.compare_kgReward(Reward, dist_replay)
 
         # 多次的平均奖励值
-        Reward = torch.mean(Reward)
-        Reward = Reward + self.lamda * dist
-        dist_sort = dist_sort.detach()
-        return Reward, dist_sort
+        Reward = torch.mean(Reward,dim=0)
+        # Reward = Reward + self.lamda * dist
+        # dist_sort = dist_sort.detach()
+        return Reward#, dist_sort
 
     def compare_kgReward(self, reward, dist):
         """
