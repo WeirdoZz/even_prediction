@@ -138,7 +138,7 @@ def evaluate_keprl(model,val_data,num_events):
         # batch_valid_len = torch.from_numpy(batch_valid_len).type(torch.LongTensor).to(device)
         # batch_valid_sequences = torch.from_numpy(batch_valid_sequences).type(torch.LongTensor).to(device)
 
-        prediction_score ,_,_= model(batch_valid_sequences, batch_valid_len)
+        prediction_score ,_= model(batch_valid_sequences, batch_valid_len)
         rating_pred = prediction_score
         rating_pred = rating_pred.cpu().data.numpy().copy()
 
