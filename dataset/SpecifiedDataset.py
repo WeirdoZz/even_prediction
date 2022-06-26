@@ -11,8 +11,8 @@ class NYT(Dataset):
         self.dev_sequence_file = "dev_sequence.pkl"
         self.test_sequence_file = "test_sequence.pkl"
         self.kg_file="event_embedding.npy"
-
-        self.num_events=23474
+        # verb_only=23474
+        self.num_events=47256
 
     def generatet_dataset(self,index_shift=1):
         """
